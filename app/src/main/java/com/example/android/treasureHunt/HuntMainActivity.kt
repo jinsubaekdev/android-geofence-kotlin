@@ -95,8 +95,10 @@ class HuntMainActivity : AppCompatActivity() {
  */
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        // TODO: Step 7 add code to check that the user turned on their device location and ask
-        //  again if they did not
+        //  again if they denied to turn on the GPS
+        if(requestCode == REQUEST_TURN_DEVICE_LOCATION_ON){
+            checkDeviceLocationSettingsAndStartGeofence(false)
+        }
     }
 
     /*
@@ -124,7 +126,6 @@ class HuntMainActivity : AppCompatActivity() {
         permissions: Array<String>,
         grantResults: IntArray
     ) {
-        // TODO: Step 5 add code to handle the result of the user's permission
         if (grantResults.isEmpty() ||
             grantResults[LOCATION_PERMISSION_INDEX] == PackageManager.PERMISSION_DENIED ||
             (requestCode == REQUEST_FOREGROUND_AND_BACKGROUND_PERMISSION_RESULT_CODE &&
@@ -175,6 +176,34 @@ class HuntMainActivity : AppCompatActivity() {
      */
     private fun checkDeviceLocationSettingsAndStartGeofence(resolve: Boolean = true) {
         // TODO: Step 6 add code to check that the device's location is on
+        val locationRequest = LocationRequest.create().apply {
+            priority = LocationRequest.PRIORITY_LOW_POWER
+        }
+        val builder = LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
+        val settingsClient = LocationServices.getSettingsClient(this)
+        val locationSettingsResponseTask =
+            settingsClient.checkLocationSettings(builder.build())
+        locationSettingsResponseTask.addOnFailureListener { exception ->
+            if(exception is ResolvableApiException && resolve){
+                try {
+                    exception.startResolutionForResult(this,
+                    REQUEST_TURN_DEVICE_LOCATION_ON)
+                } catch (sendEx: IntentSender.SendIntentException){
+                    Log.d(TAG, "Error getting location settings resolution: ${sendEx.message}")
+                }
+            } else {
+                Snackbar.make(
+                    binding.activityMapsMain,
+                    R.string.location_required_error, Snackbar.LENGTH_INDEFINITE
+                ).setAction(android.R.string.ok){
+                    checkDeviceLocationSettingsAndStartGeofence()
+                }.show()
+            }
+        }
+        locationSettingsResponseTask.addOnCompleteListener {
+            if(it.isSuccessful)
+                addGeofenceForClue()
+        }
     }
 
     /*
